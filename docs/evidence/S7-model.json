@@ -1,0 +1,10 @@
+{
+  "session": "S7",
+  "source": "Salidas Capstone S11.md (nota privada del usuario)",
+  "executionTimestamp": null,
+  "importedAt": "2026-09-24",
+  "indexed": 4,
+  "skipped": 0,
+  "total": 4,
+  "model": "amazon.titan-embed-text-v2:0"
+}

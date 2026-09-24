@@ -1,13 +1,18 @@
 {
-  "name": "TechModa Serverless Capstone",
-  "image": "mcr.microsoft.com/devcontainers/javascript-node:18-bullseye",
+  "name": "TechModa AI Capstone",
+
+  // node:22 para que coincida con el Runtime nodejs22.x de las Lambdas CRUD.
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:22-bookworm",
 
   "features": {
     "ghcr.io/devcontainers/features/aws-cli:1": {
       "version": "latest"
     },
+    // 3.12 DEBE coincidir con el `Runtime: python3.12` de las Lambdas de IA.
+    // Con 3.11 `sam build` falla con "PythonPipBuilder:Validation - Binary
+    // validation failed for python ... did not satisfy constraints for runtime".
     "ghcr.io/devcontainers/features/python:1": {
-      "version": "3.11"
+      "version": "3.12"
     }
   },
 
@@ -19,7 +24,7 @@
         "dbaeumer.vscode-eslint",
         "esbenp.prettier-vscode",
         "amazonwebservices.aws-toolkit-vscode",
-        "ms-azuretools.vscode-docker",
+        "ms-python.python",
         "redhat.vscode-yaml",
         "yzhang.markdown-all-in-one"
       ],
@@ -35,7 +40,7 @@
     }
   },
 
-  "forwardPorts": [],
+  "forwardPorts": [5173],
 
   "remoteUser": "node"
 }

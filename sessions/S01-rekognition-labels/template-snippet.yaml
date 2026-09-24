@@ -1,0 +1,59 @@
+# ============================================================================
+# S1 · Rekognition DetectLabels  —  pegar dentro de `Resources:` en template.yaml
+# ============================================================================
+# Patrón (ver docs/IAM.md):
+#   - SIN API Gateway -> la función se expone con su propia Lambda Function URL.
+#   - Declara sus `Policies:` -> SAM le crea un rol de mínimo privilegio.
+#     Rekognition se acota por ACCIÓN (las APIs Detect* no admiten ARN).
+# ----------------------------------------------------------------------------
+
+  EnrichLabelsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub ${AWS::StackName}-EnrichLabels
+      Description: S1 - Auto-etiquetado de imagenes de producto (Rekognition DetectLabels)
+      CodeUri: sessions/S01-rekognition-labels/functions/enrich-labels
+      Handler: app.lambda_handler
+      Runtime: python3.12          # override del Runtime global (nodejs22.x)
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ProductsTable
+        - Statement:
+            - Effect: Allow
+              Action: rekognition:DetectLabels
+              Resource: "*"
+        # Si imageUrl es s3://, Rekognition lee el objeto con ESTE rol.
+        - Statement:
+            - Effect: Allow
+              Action: s3:GetObject
+              Resource: !Sub arn:${AWS::Partition}:s3:::${AWS::StackName}-*/*
+      Environment:
+        Variables:
+          LABEL_MIN_CONFIDENCE: "80"
+          LABEL_MAX_LABELS: "15"
+      FunctionUrlConfig:
+        AuthType: NONE
+        Cors:
+          AllowOrigins: [ "*" ]
+          AllowMethods: [ "*" ]
+          AllowHeaders: [ "*" ]
+
+# ----------------------------------------------------------------------------
+# FUNCTION URL — agregá esta salida en Outputs: para obtener la URL pública:
+#
+#   Outputs:
+#     EnrichLabelsUrl:
+#       Description: S1 Function URL
+#       Value: !GetAtt EnrichLabelsFunctionUrl.FunctionUrl
+#
+# El productId se toma del path (rawPath: /products/<id>/labels) o del body
+# {"productId":"..."} — el handler soporta ambos. Ejemplo de invocación:
+#
+#   URL=$(aws cloudformation describe-stacks --stack-name techmoda-ai \
+#          --query "Stacks[0].Outputs[?OutputKey=='EnrichLabelsUrl'].OutputValue" --output text)
+#   curl -X POST "${URL%/}/products/<PRODUCT_ID>/labels"
+#
+# Nota de permisos: el bloque Policies de arriba concede exactamente
+# rekognition:DetectLabels + s3:GetObject sobre los buckets del stack. Nada más.
+# (En una cuenta propia sí lo acotarías por acción/ARN — ver historial git.)
+# ----------------------------------------------------------------------------

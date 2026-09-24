@@ -25,8 +25,7 @@ exports.handler = async (event) => {
             return {
                 statusCode: 400,
                 headers: {
-                    'Content-Type': 'application/json',
-                    'Access-Control-Allow-Origin': '*'
+                    'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
                     error: 'ID del producto requerido'
@@ -51,8 +50,7 @@ exports.handler = async (event) => {
             return {
                 statusCode: 404,
                 headers: {
-                    'Content-Type': 'application/json',
-                    'Access-Control-Allow-Origin': '*'
+                    'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
                     error: 'Producto no encontrado'
@@ -89,6 +87,12 @@ exports.handler = async (event) => {
             expressionAttributeValues[':category'] = body.category;
         }
 
+        if (body.stock !== undefined) {
+            updateExpressions.push('#stock = :stock');
+            expressionAttributeNames['#stock'] = 'stock';
+            expressionAttributeValues[':stock'] = parseInt(body.stock, 10);
+        }
+
         if (body.imageUrl !== undefined) {
             updateExpressions.push('#imageUrl = :imageUrl');
             expressionAttributeNames['#imageUrl'] = 'imageUrl';
@@ -119,8 +123,7 @@ exports.handler = async (event) => {
         return {
             statusCode: 200,
             headers: {
-                'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': '*'
+                'Content-Type': 'application/json'
             },
             body: JSON.stringify(updateResult.Attributes)
         };
@@ -130,8 +133,7 @@ exports.handler = async (event) => {
         return {
             statusCode: 500,
             headers: {
-                'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': '*'
+                'Content-Type': 'application/json'
             },
             body: JSON.stringify({
                 error: 'Error al actualizar producto',

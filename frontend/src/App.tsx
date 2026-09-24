@@ -1,9 +1,11 @@
-import { useState } from 'react';
+import { FormEvent, useState } from 'react';
 import { Store, Settings, Search, Plus, Loader2 } from 'lucide-react';
 import { ProductCard } from './components/ProductCard';
 import { ProductModal } from './components/ProductModal';
 import { useProducts } from './hooks/useProducts';
-import type { Product } from './lib/types';
+import { ChatWidget } from './components/ChatWidget';
+import { api } from './lib/api';
+import type { Product, SearchResult } from './lib/types';
 
 function App() {
   const [isAdmin, setIsAdmin] = useState(false);
@@ -11,12 +13,14 @@ function App() {
   const [editingProduct, setEditingProduct] = useState<Product | undefined>();
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('Todos');
-
+  const [semanticResults, setSemanticResults] = useState<SearchResult[] | null>(null);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState('');
   const { products, loading, error, createProduct, updateProduct, deleteProduct } = useProducts();
 
-  const handleSaveProduct = async (productData: Omit<Product, 'product_id' | 'created_at' | 'updated_at'>) => {
+  const handleSaveProduct = async (productData: Omit<Product, 'productId' | 'createdAt' | 'updatedAt'>) => {
     if (editingProduct) {
-      const result = await updateProduct(editingProduct.product_id, productData);
+      const result = await updateProduct(editingProduct.productId, productData);
       if (result.success) {
         setEditingProduct(undefined);
       } else {
@@ -48,13 +52,75 @@ function App() {
     setIsModalOpen(false);
     setEditingProduct(undefined);
   };
+  const handleSemanticSearch = async (event: FormEvent) => {
+    event.preventDefault();
 
-  const filteredProducts = products.filter((product) => {
-    const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      product.description.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory = categoryFilter === 'Todos' || product.category === categoryFilter;
-    return matchesSearch && matchesCategory;
-  });
+    const query = searchTerm.trim();
+
+    if (!query) {
+      setSemanticResults(null);
+      setSearchError('');
+      return;
+    }
+
+    setSearchLoading(true);
+    setSearchError('');
+
+    try {
+      const results = await api.semanticSearch(query);
+      setSemanticResults(results);
+    } catch (err) {
+      setSearchError(
+        err instanceof Error ? err.message : 'Falló la búsqueda semántica'
+      );
+    } finally {
+      setSearchLoading(false);
+    }
+  };
+  const semanticPositions = new Map(
+    (semanticResults || []).map((result, index) => [
+      result.productId,
+      index,
+    ])
+  );
+
+  const filteredProducts = products
+    .filter((product) => {
+      const normalizedSearch = searchTerm.trim().toLowerCase();
+
+      // Antes de ejecutar la búsqueda semántica, conserva el filtro local
+      // que esperan los tests existentes.
+      const matchesLocalSearch =
+        semanticResults !== null ||
+        !normalizedSearch ||
+        product.name.toLowerCase().includes(normalizedSearch) ||
+        product.description.toLowerCase().includes(normalizedSearch) ||
+        product.aiDescription?.toLowerCase().includes(normalizedSearch);
+
+      // Después de ejecutar la búsqueda semántica, usa los IDs
+      // devueltos por GET /search?q=.
+      const matchesSemanticSearch =
+        semanticResults === null ||
+        semanticPositions.has(product.productId);
+
+      const matchesCategory =
+        categoryFilter === 'Todos' ||
+        product.category === categoryFilter;
+
+      return (
+        matchesLocalSearch &&
+        matchesSemanticSearch &&
+        matchesCategory
+      );
+  })
+  .sort((a, b) => {
+    if (semanticResults === null) return 0;
+
+    return (
+      (semanticPositions.get(a.productId) ?? Number.MAX_SAFE_INTEGER) -
+      (semanticPositions.get(b.productId) ?? Number.MAX_SAFE_INTEGER)
+    );
+    });
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
@@ -79,7 +145,7 @@ function App() {
               }`}
             >
               <Settings className="w-4 h-4" />
-              {isAdmin ? 'Modo Admin' : 'Modo Cliente'}
+              {isAdmin ? 'Modo Cliente' : 'Modo Admin'}
             </button>
           </div>
         </div>
@@ -90,13 +156,55 @@ function App() {
           <div className="flex flex-col sm:flex-row gap-4">
             <div className="flex-1 relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Buscar productos..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
+              <form onSubmit={handleSemanticSearch} className="flex flex-1 gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
+
+                <input
+                  type="search"
+                  placeholder="Buscar productos por significado..."
+                  value={searchTerm}
+                  onChange={(event) => {
+                    setSearchTerm(event.target.value);
+
+                    if (!event.target.value.trim()) {
+                      setSemanticResults(null);
+                      setSearchError('');
+                    }
+                  }}
+                  className="w-full rounded-lg border border-gray-200 py-3 pl-10 pr-4 focus:border-transparent focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={searchLoading}
+                className="rounded-lg bg-blue-600 px-5 py-3 font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+              >
+                {searchLoading ? 'Buscando…' : 'Buscar con IA'}
+              </button>
+
+              {semanticResults !== null && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchTerm('');
+                    setSemanticResults(null);
+                    setSearchError('');
+                  }}
+                  className="rounded-lg border px-4 py-3 text-gray-700 hover:bg-gray-50"
+                >
+                  Limpiar
+                </button>
+              )}
+            </form>
+            {searchError && (<p role="alert" className="mt-2 text-sm text-red-600">{searchError}</p>
+                )}
+                {semanticResults !== null && !searchError && (
+                  <p className="mt-2 text-sm text-gray-500" aria-live="polite">
+                    {semanticResults.length} resultados ordenados por relevancia semántica.
+                  </p>
+                )}
             </div>
             <select
               value={categoryFilter}
@@ -122,11 +230,13 @@ function App() {
         </div>
 
         {loading ? (
-          <div className="flex items-center justify-center py-20">
-            <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+          // role="status" + aria-live: un lector de pantalla anuncia la carga.
+          <div role="status" aria-live="polite" className="flex items-center justify-center py-20">
+            <Loader2 className="w-8 h-8 text-blue-600 animate-spin" aria-hidden="true" />
+            <span className="sr-only">Cargando productos…</span>
           </div>
         ) : error ? (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+          <div role="alert" className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
             Error: {error}
           </div>
         ) : filteredProducts.length === 0 ? (
@@ -145,7 +255,7 @@ function App() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredProducts.map((product) => (
               <ProductCard
-                key={product.product_id}
+                key={product.productId}
                 product={product}
                 isAdmin={isAdmin}
                 onEdit={handleEdit}
@@ -162,7 +272,7 @@ function App() {
         onSave={handleSaveProduct}
         product={editingProduct}
       />
-
+<ChatWidget />
       <footer className="bg-white border-t mt-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <p className="text-center text-gray-500 text-sm">

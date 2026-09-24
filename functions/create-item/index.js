@@ -27,8 +27,7 @@ exports.handler = async (event) => {
             return {
                 statusCode: 400,
                 headers: {
-                    'Content-Type': 'application/json',
-                    'Access-Control-Allow-Origin': '*'
+                    'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
                     error: 'Campos requeridos faltantes',
@@ -45,6 +44,7 @@ exports.handler = async (event) => {
             description: body.description || '',
             price: parseFloat(body.price),
             category: body.category || '',
+            stock: Number.isFinite(parseInt(body.stock, 10)) ? parseInt(body.stock, 10) : 0,
             imageUrl: body.imageUrl || '',
             createdAt: now,
             updatedAt: now
@@ -63,8 +63,7 @@ exports.handler = async (event) => {
         return {
             statusCode: 201,
             headers: {
-                'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': '*'
+                'Content-Type': 'application/json'
             },
             body: JSON.stringify(product)
         };
@@ -74,8 +73,7 @@ exports.handler = async (event) => {
         return {
             statusCode: 500,
             headers: {
-                'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': '*'
+                'Content-Type': 'application/json'
             },
             body: JSON.stringify({
                 error: 'Error al crear producto',

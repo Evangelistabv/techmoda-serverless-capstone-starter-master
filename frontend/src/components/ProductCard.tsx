@@ -1,5 +1,6 @@
-import { ShoppingCart, Package } from 'lucide-react';
+import { Package, ShoppingCart } from 'lucide-react';
 import type { Product } from '../lib/types';
+import { useRef, useState } from 'react';
 
 interface ProductCardProps {
   product: Product;
@@ -8,66 +9,177 @@ interface ProductCardProps {
   isAdmin?: boolean;
 }
 
-export function ProductCard({ product, onEdit, onDelete, isAdmin }: ProductCardProps) {
+export function ProductCard({
+  product,
+  onEdit,
+  onDelete,
+  isAdmin,
+}: ProductCardProps) {
+  const displayedDescription =
+    product.aiDescription || product.description;
+
+  const imageAlt =
+    product.altText || product.aiAltText || product.name;
+
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const cachedVoice = useRef<{ url: string; expiresAt: number } | null>(null);
+  const [audioLoading, setAudioLoading] = useState(false);
+  const [audioError, setAudioError] = useState('');
+
+  const playAudio = async () => {
+    if (audioLoading) return;
+
+    setAudioLoading(true);
+    setAudioError('');
+
+    try {
+      let cached = cachedVoice.current;
+
+      if (!cached || Date.now() >= cached.expiresAt) {
+        const baseUrl = import.meta.env.VITE_VOICE_API_URL;
+
+        if (!baseUrl) {
+          throw new Error('Falta configurar VITE_VOICE_API_URL');
+        }
+
+        const response = await fetch(
+          `${baseUrl.replace(/\/+$/, '')}/products/${encodeURIComponent(product.productId)}/voice`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ lang: 'es' }),
+          }
+        );
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || 'No se pudo generar el audio');
+        }
+
+        if (typeof data.audioUrl !== 'string' || !data.audioUrl) {
+          throw new Error('El servidor no devolvió audioUrl');
+        }
+
+        cached = {
+          url: data.audioUrl,
+          expiresAt:
+            Date.now() + Math.max(0, (Number(data.expiresIn) || 3600) - 60) * 1000,
+        };
+
+        cachedVoice.current = cached;
+      }
+
+      const audio = audioRef.current;
+
+      if (audio) {
+        audio.src = cached.url;
+        await audio.play();
+      }
+    } catch (error) {
+      cachedVoice.current = null;
+      setAudioError(
+        error instanceof Error ? error.message : 'No se pudo reproducir el audio'
+      );
+    } finally {
+      setAudioLoading(false);
+    }
+  };
+
   return (
-    <div className="bg-white rounded-lg shadow-md overflow-hidden transition-all duration-300 hover:shadow-xl hover:scale-105">
+    <article className="overflow-hidden rounded-lg bg-white shadow-md transition-all duration-300 hover:shadow-xl">
       <div className="aspect-square overflow-hidden bg-gray-100">
         <img
-          src={product.image_url}
-          alt={product.name}
-          className="w-full h-full object-cover"
+          src={product.imageUrl}
+          alt={imageAlt}
+          className="h-full w-full object-cover"
         />
       </div>
+
       <div className="p-5">
-        <div className="flex items-start justify-between mb-2">
-          <h3 className="text-lg font-semibold text-gray-900 line-clamp-1">
+        <div className="mb-2 flex items-start justify-between gap-3">
+          <h3 className="text-lg font-semibold text-gray-900">
             {product.name}
           </h3>
-          <span className="text-xs px-2 py-1 bg-blue-50 text-blue-700 rounded-full font-medium">
+
+          <span className="rounded-full bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700">
             {product.category}
           </span>
         </div>
-        <p className="text-gray-600 text-sm mb-4 line-clamp-2">
-          {product.description}
+
+        <p className="mb-2 text-sm text-gray-600">
+          {displayedDescription}
         </p>
-        <div className="flex items-center justify-between mb-4">
+
+        {product.aiDescription && (
+          <p className="mb-4 text-xs font-medium text-purple-600">
+            Descripción generada con IA
+          </p>
+        )}
+
+        <div className="mb-4">
+          <button
+            type="button"
+            onClick={playAudio}
+            disabled={audioLoading}
+            className="rounded-lg border border-blue-200 px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-50"
+          >
+            {audioLoading ? 'Preparando audio…' : '🔊 escuchar'}
+          </button>
+
+          <audio ref={audioRef} controls preload="none" className="mt-2 w-full" />
+
+          {audioError && (
+            <p role="alert" className="mt-2 text-sm text-red-600">
+              {audioError}
+            </p>
+          )}
+        </div>
+
+        <div className="mb-4 flex items-center justify-between">
           <span className="text-2xl font-bold text-gray-900">
             ${product.price.toFixed(2)}
           </span>
+
           <div className="flex items-center gap-1 text-sm text-gray-500">
-            <Package className="w-4 h-4" />
+            <Package className="h-4 w-4" />
             <span>{product.stock} disponibles</span>
           </div>
         </div>
+
         {isAdmin ? (
           <div className="flex gap-2">
             <button
+              type="button"
               onClick={() => onEdit?.(product)}
-              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+              className="flex-1 rounded-lg bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700"
             >
               Editar
             </button>
+
             <button
-              onClick={() => onDelete?.(product.product_id)}
-              className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
+              type="button"
+              onClick={() => onDelete?.(product.productId)}
+              className="flex-1 rounded-lg bg-red-600 px-4 py-2 font-medium text-white hover:bg-red-700"
             >
               Eliminar
             </button>
           </div>
         ) : (
           <button
+            type="button"
             disabled={product.stock === 0}
-            className={`w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
+            className={`flex w-full items-center justify-center gap-2 rounded-lg px-4 py-2 font-medium ${
               product.stock === 0
-                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                ? 'cursor-not-allowed bg-gray-300 text-gray-500'
                 : 'bg-blue-600 text-white hover:bg-blue-700'
             }`}
           >
-            <ShoppingCart className="w-4 h-4" />
-            {product.stock === 0 ? 'Agotado' : 'Agregar al Carrito'}
+            <ShoppingCart className="h-4 w-4" />
+            {product.stock === 0 ? 'Agotado' : 'Agregar al carrito'}
           </button>
         )}
       </div>
-    </div>
+    </article>
   );
 }

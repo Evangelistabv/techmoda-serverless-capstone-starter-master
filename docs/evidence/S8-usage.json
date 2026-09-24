@@ -1,0 +1,15 @@
+{
+  "session": "S8",
+  "source": "Salidas Capstone S11.md (nota privada del usuario)",
+  "sourceSection": 8,
+  "executionTimestamp": null,
+  "importedAt": "2026-09-24",
+  "model": "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+  "usage": {
+    "inputTokens": 276,
+    "outputTokens": 114,
+    "totalTokens": 390,
+    "cacheReadInputTokens": 0,
+    "cacheWriteInputTokens": 0
+  }
+}
